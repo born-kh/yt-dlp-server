@@ -1,45 +1,43 @@
-// server.js
-const express = require('express');
-const { spawn } = require('child_process');
-const path = require('path');
+const express = require('express')
+const { spawn } = require('child_process')
+const fs = require('fs')
+const path = require('path')
+const os = require('os')
 
-const app = express();
-app.use(express.json());
+const app = express()
+app.use(express.json())
 
-// Укажи путь к cookies.txt, экспортированным из браузера
-const COOKIES_PATH = path.join(__dirname, 'cookies.txt');
+app.post('/download', async (req, res) => {
+  const { url } = req.body
+  if (!url) return res.status(400).json({ error: 'url_required' })
 
-app.post('/download', (req, res) => {
-  const { url } = req.body;
-  if (!url) return res.status(400).json({ error: 'url_required' });
-
-  res.setHeader('Content-Type', 'video/mp4');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  console.log(`[start] Downloading: ${url}`);
+  const tmpFile = path.join(os.tmpdir(), `yt-${Date.now()}.mp4`)
 
   const yt = spawn('yt-dlp', [
-    '--cookies', COOKIES_PATH,      // используем авторизационные cookies
-    '-f', 'bv*[ext=mp4]+ba[ext=m4a]/mp4',
-    '-o', '-',                       // вывод в stdout
-    url
-  ]);
+    '-f',
+    'bv*[ext=mp4]+ba[ext=m4a]/mp4',
+    '--merge-output-format',
+    'mp4',
+    '-o',
+    tmpFile,
+    url,
+  ])
 
-  yt.stdout.pipe(res);
+  yt.stderr.on('data', d => console.log(d.toString()))
 
-  yt.stderr.on('data', (data) => {
-    console.log(`[yt-dlp] ${data.toString()}`);
-  });
+  yt.on('close', code => {
+    if (code !== 0) {
+      return res.status(500).json({ error: 'yt-dlp failed' })
+    }
 
-  yt.on('close', (code) => {
-    console.log(`[done] Finished with code ${code}`);
-    res.end();
-  });
+    res.setHeader('Content-Type', 'video/mp4')
+    res.setHeader('Content-Length', fs.statSync(tmpFile).size)
 
-  yt.on('error', (err) => {
-    console.error(`[error] ${err}`);
-    res.status(500).json({ error: err.message });
-  });
-});
+    const stream = fs.createReadStream(tmpFile)
+    stream.pipe(res)
 
-app.listen(3000, () => console.log('YT server running on :3000'));
+    stream.on('close', () => fs.unlinkSync(tmpFile))
+  })
+})
+
+app.listen(3000, () => console.log('YT server running on :3000'))
