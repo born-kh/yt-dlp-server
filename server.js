@@ -14,14 +14,15 @@ app.post('/download', async (req, res) => {
   const tmpFile = path.join(os.tmpdir(), `yt-${Date.now()}.mp4`)
 
   const yt = spawn('yt-dlp', [
-    '-f',
-    'bv*[ext=mp4]+ba[ext=m4a]/mp4',
-    '--merge-output-format',
-    'mp4',
-    '-o',
-    tmpFile,
-    url,
+    '-f', 'best[ext=mp4]/best',
+    '-o', tmpFile,
+    '--restrict-filenames',
+    '--progress',
+    '--newline',
+    url
   ])
+
+
 
   yt.stderr.on('data', d => console.log(d.toString()))
 
